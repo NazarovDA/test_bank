@@ -31,8 +31,6 @@ func main() {
 	}
 	defer channel.Close()
 
-	log.Printf("rabbitmqQueue: %s", rabbitmqQueue)
-
 	if _, err = channel.QueueDeclare(
 		rabbitmqQueue, // routing key
 		true,
