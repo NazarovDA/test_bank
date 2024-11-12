@@ -55,5 +55,14 @@ services:
       - "15672:15672"
       - "5672:5672"
 
+  test: 
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      - api-service
+    entrypoint: ["go", "test", "-v", "./test"]
+    # run using docker-compose up --build test
+
 volumes:
   db_data:
