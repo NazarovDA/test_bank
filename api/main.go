@@ -68,8 +68,9 @@ func main() {
 			false,         // mandatory
 			false,         // immediate
 			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        body,
+				ContentType:  "application/json",
+				Body:         body,
+				DeliveryMode: amqp.Persistent,
 			})
 		if err != nil {
 			http.Error(w, "Failed to queue request", http.StatusInternalServerError)
