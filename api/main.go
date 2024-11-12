@@ -31,7 +31,22 @@ func main() {
 	}
 	defer channel.Close()
 
-	http.HandleFunc("/transfer", func(w http.ResponseWriter, r *http.Request) {
+	log.Printf("rabbitmqQueue: %s", rabbitmqQueue)
+
+	if _, err = channel.QueueDeclare(
+		rabbitmqQueue, // routing key
+		true,
+		false,
+		false,
+		false,
+		nil,
+	); err != nil {
+		log.Fatalf("Failed to declare a queue: %v", err)
+	} else {
+		log.Print("Queue declared")
+	}
+
+	http.HandleFunc("POST /transfer", func(w http.ResponseWriter, r *http.Request) {
 		var req TransactionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request payload", http.StatusBadRequest)
