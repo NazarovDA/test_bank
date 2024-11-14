@@ -4,12 +4,9 @@ services:
       context: .
       dockerfile: api/Dockerfile
     environment:
-      - DB_HOST=db
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_NAME=${POSTGRES_DB}
       - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_QUEUE=transaction_queue
+      - RABBITMQ_TRANSACTION_QUEUE=transaction_queue
+      - RABBITMQ_LOG_QUEUE=log_queue
       - API_PORT=8080
     ports:
       - "8080:8080"
@@ -30,11 +27,32 @@ services:
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
       - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_QUEUE=transaction_queue
+      - RABBITMQ_TRANSACTION_QUEUE=transaction_queue
+      - RABBITMQ_LOG_QUEUE=log_queue
     depends_on:
       rabbitmq:
         condition: service_healthy
       db:
+        condition: service_healthy
+      logger:
+        condition: service_started
+    restart: always
+
+  logger:
+    build:
+      context: .
+      dockerfile: logger/Dockerfile
+    environment:
+      - DB_HOST=db
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_LOG_QUEUE=log_queue
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       api-service:
         condition: service_started
