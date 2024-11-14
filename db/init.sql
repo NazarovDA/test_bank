@@ -8,7 +8,7 @@ INSERT INTO clients(name, balance) VALUES ('Jhon Doe', 10000.00);
 INSERT INTO clients(name, balance) VALUES ('Judy Doe', 10000.00);
 
 CREATE TABLE IF NOT EXISTS transactions (
-    id SERIAL PRIMARY KEY,
+    id VARCHAR(255) PRIMARY KEY,
     from_account_id INT NOT NULL,
     to_account_id INT NOT NULL,
     amount NUMERIC(15, 2) NOT NULL,
