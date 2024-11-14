@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS clients (
     balance NUMERIC(15, 2) NOT NULL DEFAULT 0.0
 );
 
-INSERT INTO clients(name, balance) VALUES ("Jhon Doe", 10000.00);
-INSERT INTO clients(name, balance) VALUES ("Judy Doe", 10000.00);
+INSERT INTO clients(name, balance) VALUES ('Jhon Doe', 10000.00);
+INSERT INTO clients(name, balance) VALUES ('Judy Doe', 10000.00);
 
 CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
