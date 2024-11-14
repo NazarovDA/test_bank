@@ -12,19 +12,33 @@ import (
 )
 
 type TransactionRequest struct {
+	TransactionID string  `json:"id"`
 	FromAccountID int     `json:"from_account_id"`
 	ToAccountID   int     `json:"to_account_id"`
 	Amount        float64 `json:"amount"`
 }
+type TransActionLog struct {
+	TransactionID string  `json:"id"`
+	SenderId      int     `json:"sender"`
+	ReceiverId    int     `json:"receiver"`
+	Amount        float64 `json:"amount"`
+	Status        string  `json:"status" default:"pending"`
+}
+
+var channel *amqp.Channel
+var rabbitmqLogQueue string
 
 func main() {
+	// Чтение переменных окружения
 	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
-	rabbitmqQueue := os.Getenv("RABBITMQ_QUEUE")
+	rabbitmqQueue := os.Getenv("RABBITMQ_TRANSACTION_QUEUE")
+	rabbitmqLogQueue = os.Getenv("RABBITMQ_LOG_QUEUE")
 	dbHost := os.Getenv("DB_HOST")
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 
+	// Подключение к PostgreSQL
 	connStr := "host=" + dbHost + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -32,13 +46,14 @@ func main() {
 	}
 	defer db.Close()
 
+	// Подключение к RabbitMQ
 	conn, err := amqp.Dial("amqp://" + rabbitmqHost)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
 
-	channel, err := conn.Channel()
+	channel, err = conn.Channel()
 	if err != nil {
 		log.Fatalf("Failed to open a channel: %v", err)
 	}
@@ -68,55 +83,72 @@ func main() {
 		if err != nil {
 			log.Printf("Failed to process transaction: %v", err)
 			continue
+		} else {
+
 		}
 
 		log.Printf("Transaction processed: %+v", req)
 	}
 }
 
+func sendLog(req TransactionRequest, status string) {
+	logReq := TransActionLog{
+		TransactionID: req.TransactionID,
+		SenderId:      req.FromAccountID,
+		ReceiverId:    req.ToAccountID,
+		Amount:        req.Amount,
+		Status:        status,
+	}
+	logBody, err := json.Marshal(logReq)
+	if err != nil {
+		return
+	}
+	_ = channel.Publish(
+		"",               // exchange
+		rabbitmqLogQueue, // routing key
+		false,            // mandatory
+		false,            // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         logBody,
+			DeliveryMode: amqp.Persistent,
+		})
+}
+
 func processTransaction(db *sql.DB, req TransactionRequest) error {
 	tx, err := db.Begin()
 	if err != nil {
-		return logTransactionError(db, req, "failed", "failed to begin transaction")
+		return err
 	}
 
 	var fromBalance float64
 	err = tx.QueryRow("SELECT balance FROM clients WHERE id = $1", req.FromAccountID).Scan(&fromBalance)
 	if err != nil {
 		tx.Rollback()
-		return logTransactionError(db, req, "failed", "sender not found or query error")
+		sendLog(req, err.Error())
+		return err
 	}
 	if fromBalance < req.Amount {
 		tx.Rollback()
-		return logTransactionError(db, req, "failed", "insufficient funds")
+		err = fmt.Errorf("not enough money")
+		sendLog(req, err.Error())
+		return err
 	}
 
 	_, err = tx.Exec("UPDATE clients SET balance = balance - $1 WHERE id = $2", req.Amount, req.FromAccountID)
 	if err != nil {
 		tx.Rollback()
-		return logTransactionError(db, req, "failed", "failed to debit sender's account")
+		sendLog(req, err.Error())
+		return err
 	}
 	_, err = tx.Exec("UPDATE clients SET balance = balance + $1 WHERE id = $2", req.Amount, req.ToAccountID)
 	if err != nil {
 		tx.Rollback()
-		return logTransactionError(db, req, "failed", "failed to credit recipient's account")
+		sendLog(req, err.Error())
+		return err
 	}
 
-	_, err = tx.Exec("INSERT INTO transactions (from_account_id, to_account_id, amount, status) VALUES ($1, $2, $3, $4)",
-		req.FromAccountID, req.ToAccountID, req.Amount, "completed")
-	if err != nil {
-		tx.Rollback()
-		return logTransactionError(db, req, "failed", "failed to log completed transaction")
-	}
+	sendLog(req, "successful")
 
 	return tx.Commit()
-}
-
-func logTransactionError(db *sql.DB, req TransactionRequest, status, errorMsg string) error {
-	_, err := db.Exec("INSERT INTO transactions (from_account_id, to_account_id, amount, status, error_message) VALUES ($1, $2, $3, $4, $5)",
-		req.FromAccountID, req.ToAccountID, req.Amount, status, errorMsg)
-	if err != nil {
-		log.Printf("Failed to log transaction error: %v", err)
-	}
-	return fmt.Errorf("%s: %s", status, errorMsg)
 }
