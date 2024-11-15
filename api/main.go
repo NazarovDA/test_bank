@@ -20,7 +20,7 @@ type TransactionRequest struct {
 	ToAccountID   int     `json:"to_account_id"`
 	Amount        float64 `json:"amount"`
 }
-type TransActionLog struct {
+type TransactionLog struct {
 	TransactionID string  `json:"id"`
 	SenderId      int     `json:"sender"`
 	ReceiverId    int     `json:"receiver"`
@@ -89,7 +89,7 @@ func main() {
 			return
 		}
 
-		logReq := TransActionLog{
+		logReq := TransactionLog{
 			TransactionID: req.TransactionID,
 			SenderId:      req.FromAccountID,
 			ReceiverId:    req.ToAccountID,
