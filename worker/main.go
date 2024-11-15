@@ -29,7 +29,6 @@ var channel *amqp.Channel
 var rabbitmqLogQueue string
 
 func main() {
-	// Чтение переменных окружения
 	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
 	rabbitmqQueue := os.Getenv("RABBITMQ_TRANSACTION_QUEUE")
 	rabbitmqLogQueue = os.Getenv("RABBITMQ_LOG_QUEUE")
@@ -38,7 +37,6 @@ func main() {
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 
-	// Подключение к PostgreSQL
 	connStr := "host=" + dbHost + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -46,7 +44,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Подключение к RabbitMQ
 	conn, err := amqp.Dial("amqp://" + rabbitmqHost)
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
