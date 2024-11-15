@@ -1,0 +1,70 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+      "title": "Transaction API",
+      "version": "1.0",
+      "description": "API для работы с транзакциями и логированием."
+    },
+    "servers": [
+      {
+        "url": "http://localhost:8080",
+        "description": "Local server"
+      }
+    ],
+    "paths": {
+      "/transfer": {
+        "post": {
+          "summary": "Создать транзакцию",
+          "description": "Создает новую транзакцию и отправляет её в очередь RabbitMQ.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from_account_id": {
+                      "type": "integer",
+                      "description": "ID отправителя"
+                    },
+                    "to_account_id": {
+                      "type": "integer",
+                      "description": "ID получателя"
+                    },
+                    "amount": {
+                      "type": "number",
+                      "format": "float",
+                      "description": "Сумма транзакции"
+                    }
+                  },
+                  "required": ["from_account_id", "to_account_id", "amount"]
+                }
+              }
+            }
+          },
+          "responses": {
+            "202": {
+              "description": "Транзакция успешно поставлена в очередь."
+            },
+            "400": {
+              "description": "Неверный запрос."
+            },
+            "500": {
+              "description": "Ошибка сервера."
+            }
+          }
+        }
+      },
+      "/isalive": {
+        "post": {
+          "summary": "Проверка работоспособности",
+          "description": "Возвращает статус сервера.",
+          "responses": {
+            "200": {
+              "description": "Сервер работает."
+            }
+          }
+        }
+      }
+    }
+  }
