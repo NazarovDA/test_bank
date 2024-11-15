@@ -143,9 +143,6 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {})
-	http.HandleFunc("GET /status/{id}", func(w http.ResponseWriter, r *http.Request) {})
-
 	port := os.Getenv("API_PORT")
 	if port == "" {
 		port = "8080"
