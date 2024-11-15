@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/streadway/amqp"
@@ -18,66 +20,110 @@ type TransActionLog struct {
 	Status        string `json:"status" default:"pending"`
 }
 
+var db *sql.DB
+
 func main() {
-	rabbitmqHost := os.Getenv("RABBITMQ_HOST")
-	rabbitmqQueue := os.Getenv("RABBITMQ_LOG_QUEUE")
+	go func() {
+		http.HandleFunc("/isalive", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		port := os.Getenv("LOGGER_PORT")
+		if port == "" {
+			port = "8080"
+		}
+		log.Print(port)
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			log.Fatalf("Failed to start API server: %v", err)
+		}
+	}()
 
-	dbHost := os.Getenv("DB_HOST")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
+	go func() {
+		rabbitmqHost := os.Getenv("RABBITMQ_HOST")
+		rabbitmqQueue := os.Getenv("RABBITMQ_LOG_QUEUE")
 
-	connStr := "host=" + dbHost + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
-	}
-	defer db.Close()
+		dbHost := os.Getenv("DB_HOST")
+		dbUser := os.Getenv("DB_USER")
+		dbPassword := os.Getenv("DB_PASSWORD")
+		dbName := os.Getenv("DB_NAME")
 
-	conn, err := amqp.Dial("amqp://" + rabbitmqHost)
-	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
-	}
-	defer conn.Close()
+		connStr := "host=" + dbHost + " user=" + dbUser + " password=" + dbPassword + " dbname=" + dbName + " sslmode=disable"
+		var err error
+		db, err = sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+		}
+		defer db.Close()
 
-	channel, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to open a channel: %v", err)
-	}
-	defer channel.Close()
+		conn, err := amqp.Dial("amqp://" + rabbitmqHost)
+		if err != nil {
+			log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+		}
+		defer conn.Close()
 
-	msgs, err := channel.Consume(
-		rabbitmqQueue, // queue
-		"",            // consumer
-		true,          // auto-ack
-		false,         // exclusive
-		false,         // no-local
-		false,         // no-wait
-		nil,           // args
-	)
-	if err != nil {
-		log.Fatalf("Failed to register a consumer: %v", err)
-	}
+		channel, err := conn.Channel()
+		if err != nil {
+			log.Fatalf("Failed to open a channel: %v", err)
+		}
+		defer channel.Close()
 
-	log.Print("Logger is ready")
-
-	for msg := range msgs {
-		log.Printf("Message received: %v", msg)
-
-		var req TransActionLog
-
-		if err := json.Unmarshal(msg.Body, &req); err != nil {
-			log.Printf("Failed to parse message: %v", err)
-			continue
+		if _, err = channel.QueueDeclare(
+			rabbitmqQueue, // routing key
+			true,
+			false,
+			false,
+			false,
+			nil,
+		); err != nil {
+			log.Fatalf("Failed to declare a queue: %v", err)
+		} else {
+			log.Print("Queue declared")
 		}
 
-		if err := processLog(db, req); err != nil {
-			log.Printf("Failed to process log: %v", err)
-			continue
+		msgs, err := channel.Consume(
+			rabbitmqQueue, // queue
+			"",            // consumer
+			true,          // auto-ack
+			false,         // exclusive
+			false,         // no-local
+			false,         // no-wait
+			nil,           // args
+		)
+		if err != nil {
+			log.Fatalf("Failed to register a consumer: %v", err)
 		}
 
-		log.Printf("Log processed: %+v", req)
-	}
+		log.Print("Logger is ready")
+
+		for msg := range msgs {
+			log.Printf("Message received: %v", msg)
+
+			var req TransActionLog
+
+			if err := json.Unmarshal(msg.Body, &req); err != nil {
+				log.Printf("Failed to parse message: %v", err)
+				continue
+			}
+
+			if err := processLog(db, req); err != nil {
+				log.Printf("Failed to process log: %v", err)
+				continue
+			}
+
+			log.Printf("Log processed: %+v", req)
+		}
+	}()
+
+	go func() {
+		for {
+			if db != nil && db.Ping() != nil {
+				log.Fatal("Failed to ping database")
+				time.Sleep(5 * time.Second)
+				os.Exit(1)
+			}
+		}
+	}()
+
+	select {}
 }
 
 func processLog(db *sql.DB, req TransActionLog) error {
