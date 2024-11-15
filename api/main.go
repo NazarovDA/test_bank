@@ -15,7 +15,7 @@ func createUuid() string {
 }
 
 type TransactionRequest struct {
-	TransactionID string  `json:"id"`
+	TransactionID string  `json:"id,omitempty"`
 	FromAccountID int     `json:"from_account_id"`
 	ToAccountID   int     `json:"to_account_id"`
 	Amount        float64 `json:"amount"`

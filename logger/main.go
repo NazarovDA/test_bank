@@ -137,13 +137,13 @@ func processLog(db *sql.DB, req TransActionLog) error {
 	var status string
 	err = tx.QueryRow("SELECT status from transactions where id = $1", req.TransactionID).Scan(&status)
 
-	if err != nil && err == sql.ErrNoRows {
+	if err != nil && err != sql.ErrNoRows {
 		tx.Rollback()
-		log.Println(96)
 		return err
 	}
 	if status == "successful" {
 		log.Printf("Transaction is already successful")
+		return nil
 	}
 
 	_, err = tx.Exec(
@@ -153,7 +153,6 @@ func processLog(db *sql.DB, req TransActionLog) error {
 
 	if err != nil {
 		tx.Rollback()
-		log.Println(107)
 		return err
 	}
 
